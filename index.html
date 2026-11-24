@@ -250,7 +250,8 @@ figcaption {
 }
 </style>
   <script type="module">
-const rounds = 7;
+const explorationRounds = 5;
+const rounds = explorationRounds + 2;
 const parameters = new URLSearchParams(location.search);
 const defaultFrom = { hex: '#FFA500', label: 'Orange' };
 const defaultTo = { hex: '#FF0000', label: 'Red' };
@@ -265,9 +266,12 @@ const progressTrack = document.querySelector('#progress-track');
 const gradient = document.querySelector('#gradient');
 const marker = document.querySelector('#boundary-marker');
 const buttons = [...document.querySelectorAll('.choice')];
-let round = 0;
-let lower = 0;
-let upper = 1;
+let round;
+let explorationPositions;
+let explorationAnswers;
+let swatchPosition;
+let lower;
+let upper;
 
 function readEndpoint(key, fallback) {
   const value = parameters.get(key);
@@ -341,9 +345,50 @@ function colorAt(position) {
   return fromLab(lab);
 }
 
+function startQuiz() {
+  const firstBand = Math.floor(Math.random() * explorationRounds);
+  const bandStep = Math.random() < .5 ? 2 : 3;
+  explorationPositions = Array.from({ length: explorationRounds }, (_, index) => {
+    // Skip neighboring bands so early swatches always jump across the gradient.
+    const band = (firstBand + index * bandStep) % explorationRounds;
+    return (band + .5) / explorationRounds + (Math.random() - .5) * .08;
+  });
+  explorationAnswers = [];
+  round = 0;
+  lower = 0;
+  upper = 1;
+  result.hidden = true;
+  quiz.hidden = false;
+  renderRound();
+}
+
+function estimateBoundaryRange() {
+  const sorted = [...explorationAnswers].sort((a, b) => a.position - b.position);
+  // Move the split from left to right, counting answers it would classify differently.
+  let disagreements = sorted.filter(answer => answer.endpoint === 'from').length;
+  let fewestDisagreements = Infinity;
+  let closestToCenter = Infinity;
+  let range;
+  let left = 0;
+
+  for (const answer of [...sorted, { position: 1, endpoint: 'to' }]) {
+    const right = answer.position;
+    const distanceToCenter = Math.abs((left + right) / 2 - .5);
+    if (disagreements < fewestDisagreements ||
+        (disagreements === fewestDisagreements && distanceToCenter < closestToCenter)) {
+      fewestDisagreements = disagreements;
+      closestToCenter = distanceToCenter;
+      range = [left, right];
+    }
+    disagreements += answer.endpoint === 'from' ? -1 : 1;
+    left = right;
+  }
+  return range;
+}
+
 function renderRound() {
-  const position = (lower + upper) / 2;
-  swatch.style.backgroundColor = colorAt(position);
+  swatchPosition = round < explorationRounds ? explorationPositions[round] : (lower + upper) / 2;
+  swatch.style.backgroundColor = colorAt(swatchPosition);
   progress.textContent = 'Round ' + (round + 1) + ' of ' + rounds;
   for (const [index, segment] of [...progressTrack.children].entries()) {
     segment.classList.toggle('filled', index <= round);
@@ -353,7 +398,7 @@ function renderRound() {
 function showResult() {
   const position = (lower + upper) / 2;
   const color = colorAt(position);
-  const percent = Math.round(position * 1000) / 10;
+  const percent = Math.round(position * 100);
   const stops = Array.from({ length: 33 }, (_, index) => colorAt(index / 32));
   gradient.style.background = 'linear-gradient(90deg, ' + stops.join(', ') + ')';
   gradient.setAttribute('aria-label', 'Gradient from ' + from.label + ' to ' + to.label + ' with your boundary marked.');
@@ -362,7 +407,7 @@ function showResult() {
   document.querySelector('#from-label').textContent = from.label;
   document.querySelector('#to-label').textContent = to.label;
   document.querySelector('#result-caption').textContent =
-    'You drew the line ' + percent + '% of the way from ' + from.label + ' to ' + to.label + ', at ' + color + '.';
+    'You drew the line about ' + percent + '% of the way from ' + from.label + ' to ' + to.label + ', at ' + color + '.';
   quiz.hidden = true;
   result.hidden = false;
   progress.textContent = 'Test complete';
@@ -372,9 +417,16 @@ function showResult() {
 function choose(endpoint) {
   if (round >= rounds) return;
 
-  const position = (lower + upper) / 2;
-  if (endpoint === 'from') lower = position;
-  else upper = position;
+  if (round < explorationRounds) {
+    explorationAnswers.push({ position: swatchPosition, endpoint });
+    if (explorationAnswers.length === explorationRounds) {
+      [lower, upper] = estimateBoundaryRange();
+    }
+  } else if (endpoint === 'from') {
+    lower = swatchPosition;
+  } else {
+    upper = swatchPosition;
+  }
 
   round += 1;
   if (round < rounds) renderRound();
@@ -395,12 +447,7 @@ document.addEventListener('keydown', event => {
 });
 
 document.querySelector('#restart').addEventListener('click', () => {
-  round = 0;
-  lower = 0;
-  upper = 1;
-  result.hidden = true;
-  quiz.hidden = false;
-  renderRound();
+  startQuiz();
   buttons[0].focus();
 });
 
@@ -409,7 +456,7 @@ document.documentElement.style.setProperty('--to', to.hex);
 for (let index = 0; index < rounds; index += 1) {
   progressTrack.append(document.createElement('span'));
 }
-renderRound();
+startQuiz();
 
 const notes = [];
 if (from.invalid) notes.push('The from color was invalid, so this test uses ' + defaultFrom.label + ' for that endpoint.');
