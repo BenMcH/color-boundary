@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Find where one color becomes another in seven quick choices.">
+  <meta name="theme-color" content="#f4f2ea">
+  <title>Color Boundary</title>
+  <style>
+:root {
+  color-scheme: light;
+  --paper: #f4f2ea;
+  --ink: #20261f;
+  --muted: #535a50;
+  --line: #d1d0c3;
+  --accent: #284b3b;
+  --from: #ffa500;
+  --to: #ff0000;
+  font-family: system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+button { font: inherit; }
+
+.page {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100svh;
+  max-width: 1480px;
+  margin-inline: auto;
+  padding-inline: clamp(20px, 6vw, 96px);
+  flex-direction: column;
+}
+
+.site-header, .site-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.site-header {
+  min-height: 83px;
+  border-bottom: 1px solid var(--line);
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 680;
+  letter-spacing: -.035em;
+}
+
+.mark {
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  border: 1px solid rgb(32 38 31 / 20%);
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--from) 50%, var(--to) 50%);
+}
+
+.progress {
+  display: grid;
+  gap: 8px;
+  min-width: 100px;
+  color: var(--muted);
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+  display: flex;
+  gap: 3px;
+}
+
+.progress-track span {
+  flex: 1;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.progress-track .filled { background: var(--accent); }
+
+main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  padding-block: clamp(28px, 6vw, 76px);
+}
+
+.experiment {
+  display: grid;
+  grid-template-columns: minmax(235px, .8fr) minmax(0, 1.6fr);
+  align-items: center;
+  gap: clamp(24px, 6vw, 96px);
+}
+
+h1 {
+  margin: 0;
+  font: 400 clamp(3.15rem, 5.75vw, 6.3rem) / .94 Georgia, serif;
+  letter-spacing: -.075em;
+}
+
+.prompt p {
+  max-width: 33ch;
+  margin: 24px 0 26px;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  max-width: 360px;
+}
+
+.choice, .action {
+  min-height: 52px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fbfaf4;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  text-align: left;
+  font-size: .88rem;
+  font-weight: 650;
+}
+
+.choice:hover { border-color: var(--accent); background: #fffef9; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.choice-label { overflow-wrap: anywhere; }
+.dot {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  border: 1px solid rgb(32 38 31 / 20%);
+  border-radius: 50%;
+  background: var(--from);
+}
+
+[data-endpoint="to"] .dot { background: var(--to); }
+
+kbd {
+  display: grid;
+  width: 20px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font: .72rem ui-monospace, monospace;
+}
+
+.specimen { margin: 0; }
+.swatch, .gradient {
+  min-height: 220px;
+  height: min(45vw, 52vh, 510px);
+  border: 1px solid rgb(32 38 31 / 16%);
+  border-radius: 9px;
+  background: #ff6e00;
+}
+
+figcaption {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: .82rem;
+}
+
+.result-scale { position: relative; }
+.boundary-marker {
+  position: absolute;
+  inset-block: 0;
+  left: var(--position);
+  width: 2px;
+  transform: translateX(-50%);
+  background: white;
+  box-shadow: 0 0 0 1px #252a24;
+}
+
+.boundary-marker::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 19px;
+  height: 19px;
+  border: 2px solid #252a24;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--boundary);
+  box-shadow: 0 0 0 2px white;
+  content: "";
+}
+
+.scale-labels { display: flex; justify-content: space-between; gap: 12px; font-weight: 620; }
+.result-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.action { padding-inline: 14px; font-weight: 630; }
+.action-primary { border-color: var(--accent); background: var(--accent); color: white; }
+.action-primary:hover { background: #1e3d2f; }
+.action span { margin-inline-start: 5px; }
+
+.note { margin: 20px 0 0; color: var(--muted); font-size: .84rem; }
+.site-footer {
+  min-height: 68px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .8rem;
+}
+
+.site-footer a { color: inherit; text-underline-offset: 3px; }
+.site-footer code { font-size: inherit; font-weight: 650; }
+
+@media (min-width: 761px) and (max-width: 960px), (max-width: 400px) {
+  kbd { display: none; }
+}
+
+@media (max-width: 760px) {
+  .site-header { min-height: 67px; }
+  .experiment { grid-template-columns: 1fr; gap: 18px; }
+  .prompt, .specimen { display: contents; }
+  h1 { font-size: clamp(2.9rem, 9vw, 4.9rem); }
+  h1 br { display: none; }
+  .prompt p { max-width: 55ch; margin: -6px 0 0; }
+  .swatch, .result-scale { grid-row: 3; }
+  .swatch, .gradient { height: clamp(185px, 53vw, 385px); min-height: 0; }
+  .choices, .result-actions { grid-row: 4; max-width: none; }
+  .scale-labels { grid-row: 4; margin-top: -7px; }
+  #result .result-actions { grid-row: 5; }
+  .site-footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 7px; padding-block: 13px; }
+}
+</style>
+  <script type="module">
+const rounds = 7;
+const parameters = new URLSearchParams(location.search);
+const defaultFrom = { hex: '#FFA500', label: 'Orange' };
+const defaultTo = { hex: '#FF0000', label: 'Red' };
+const colorContext = document.createElement('canvas').getContext('2d');
+const from = readEndpoint('from', defaultFrom);
+const to = readEndpoint('to', defaultTo);
+const quiz = document.querySelector('#quiz');
+const result = document.querySelector('#result');
+const swatch = document.querySelector('#swatch');
+const progress = document.querySelector('#progress-label');
+const progressTrack = document.querySelector('#progress-track');
+const gradient = document.querySelector('#gradient');
+const marker = document.querySelector('#boundary-marker');
+const buttons = [...document.querySelectorAll('.choice')];
+let round = 0;
+let lower = 0;
+let upper = 1;
+
+function readEndpoint(key, fallback) {
+  const value = parameters.get(key);
+  if (value === null) return fallback;
+
+  const input = value.trim();
+  const hexMatch = input.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hexMatch) {
+    const raw = hexMatch[1];
+    const digits = raw.length === 3 ? [...raw].map(char => char.repeat(2)).join('') : raw;
+    const hex = '#' + digits.toUpperCase();
+    return { hex, label: hex };
+  }
+
+  if (/^[a-z]+$/i.test(input) && input.toLowerCase() !== 'currentcolor' && colorContext) {
+    // Invalid canvas colors leave fillStyle unchanged. A second sentinel allows either color itself.
+    colorContext.fillStyle = '#010203';
+    colorContext.fillStyle = input;
+    const first = colorContext.fillStyle;
+    colorContext.fillStyle = '#040506';
+    colorContext.fillStyle = input;
+    if (colorContext.fillStyle === first && /^#[0-9a-f]{6}$/i.test(first)) {
+      return { hex: first.toUpperCase(), label: input[0].toUpperCase() + input.slice(1).toLowerCase() };
+    }
+  }
+
+  return { ...fallback, invalid: true };
+}
+
+function linearRgb(hex) {
+  return (hex.slice(1).match(/.{2}/g)).map(pair => {
+    const component = parseInt(pair, 16) / 255;
+    return component <= .04045 ? component / 12.92 : ((component + .055) / 1.055) ** 2.4;
+  });
+}
+
+function toLab(hex) {
+  const [r, g, b] = linearRgb(hex);
+  const l = Math.cbrt(.4122214708 * r + .5363325363 * g + .0514459929 * b);
+  const m = Math.cbrt(.2119034982 * r + .6806995451 * g + .1073969566 * b);
+  const s = Math.cbrt(.0883024619 * r + .2817188376 * g + .6299787005 * b);
+  return [
+    .2104542553 * l + .7936177850 * m - .0040720468 * s,
+    1.9779984951 * l - 2.4285922050 * m + .4505937099 * s,
+    .0259040371 * l + .7827717662 * m - .8086757660 * s,
+  ];
+}
+
+function fromLab([lightness, a, b]) {
+  const l = (lightness + .3963377774 * a + .2158037573 * b) ** 3;
+  const m = (lightness - .1055613458 * a - .0638541728 * b) ** 3;
+  const s = (lightness - .0894841775 * a - 1.2914855480 * b) ** 3;
+  const rgb = [
+    4.0767416621 * l - 3.3077115913 * m + .2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - .3413193965 * s,
+    -.0041960863 * l - .7034186147 * m + 1.7076147010 * s,
+  ];
+  const hex = rgb.map(value => {
+    const clamped = Math.max(0, Math.min(1, value));
+    const srgb = clamped <= .0031308 ? 12.92 * clamped : 1.055 * clamped ** (1 / 2.4) - .055;
+    return Math.round(srgb * 255).toString(16).padStart(2, '0');
+  });
+  return '#' + hex.join('').toUpperCase();
+}
+
+const fromLabColor = toLab(from.hex);
+const toLabColor = toLab(to.hex);
+
+function colorAt(position) {
+  const lab = fromLabColor.map((value, index) => value + (toLabColor[index] - value) * position);
+  return fromLab(lab);
+}
+
+function renderRound() {
+  const position = (lower + upper) / 2;
+  swatch.style.backgroundColor = colorAt(position);
+  progress.textContent = 'Round ' + (round + 1) + ' of ' + rounds;
+  for (const [index, segment] of [...progressTrack.children].entries()) {
+    segment.classList.toggle('filled', index <= round);
+  }
+}
+
+function showResult() {
+  const position = (lower + upper) / 2;
+  const color = colorAt(position);
+  const percent = Math.round(position * 1000) / 10;
+  const stops = Array.from({ length: 33 }, (_, index) => colorAt(index / 32));
+  gradient.style.background = 'linear-gradient(90deg, ' + stops.join(', ') + ')';
+  gradient.setAttribute('aria-label', 'Gradient from ' + from.label + ' to ' + to.label + ' with your boundary marked.');
+  marker.style.setProperty('--position', position * 100 + '%');
+  marker.style.setProperty('--boundary', color);
+  document.querySelector('#from-label').textContent = from.label;
+  document.querySelector('#to-label').textContent = to.label;
+  document.querySelector('#result-caption').textContent =
+    'You drew the line ' + percent + '% of the way from ' + from.label + ' to ' + to.label + ', at ' + color + '.';
+  quiz.hidden = true;
+  result.hidden = false;
+  progress.textContent = 'Test complete';
+  document.querySelector('#result-title').focus();
+}
+
+function choose(endpoint) {
+  if (round >= rounds) return;
+
+  const position = (lower + upper) / 2;
+  if (endpoint === 'from') lower = position;
+  else upper = position;
+
+  round += 1;
+  if (round < rounds) renderRound();
+  else showResult();
+}
+
+for (const button of buttons) {
+  const endpoint = button.dataset.endpoint === 'from' ? from : to;
+  const label = from.hex === to.hex ? endpoint.label + ' (' + button.dataset.endpoint + ')' : endpoint.label;
+  button.querySelector('.choice-label').textContent = label;
+  button.addEventListener('click', () => choose(button.dataset.endpoint));
+}
+
+document.addEventListener('keydown', event => {
+  if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || quiz.hidden) return;
+  if (event.key === '1') choose('from');
+  if (event.key === '2') choose('to');
+});
+
+document.querySelector('#restart').addEventListener('click', () => {
+  round = 0;
+  lower = 0;
+  upper = 1;
+  result.hidden = true;
+  quiz.hidden = false;
+  renderRound();
+  buttons[0].focus();
+});
+
+document.documentElement.style.setProperty('--from', from.hex);
+document.documentElement.style.setProperty('--to', to.hex);
+for (let index = 0; index < rounds; index += 1) {
+  progressTrack.append(document.createElement('span'));
+}
+renderRound();
+
+const notes = [];
+if (from.invalid) notes.push('The from color was invalid, so this test uses ' + defaultFrom.label + ' for that endpoint.');
+if (to.invalid) notes.push('The to color was invalid, so this test uses ' + defaultTo.label + ' for that endpoint.');
+if (from.hex === to.hex) notes.push('Both endpoints resolve to the same color. Choose two different colors for a visible gradient.');
+if (notes.length) {
+  const note = document.querySelector('#color-note');
+  note.textContent = notes.join(' ');
+  note.hidden = false;
+}
+</script>
+</head>
+<body>
+  <div class="page">
+    <header class="site-header">
+      <div class="wordmark"><span class="mark" aria-hidden="true"></span> Color Boundary</div>
+      <div id="progress" class="progress" role="status">
+        <span id="progress-label">Round 1 of 7</span>
+        <span id="progress-track" class="progress-track" aria-hidden="true"></span>
+      </div>
+    </header>
+
+    <main id="experiment">
+      <section id="quiz" class="experiment" aria-labelledby="question">
+        <div class="prompt">
+          <h1 id="question">What color<br> do you see?</h1>
+          <p>Pick the endpoint that feels closest to the swatch. Go with your first instinct.</p>
+          <div class="choices" role="group" aria-label="Color choices">
+            <button type="button" class="choice" data-endpoint="from" aria-keyshortcuts="1">
+              <span class="dot" aria-hidden="true"></span><span class="choice-label"></span><kbd aria-hidden="true">1</kbd>
+            </button>
+            <button type="button" class="choice" data-endpoint="to" aria-keyshortcuts="2">
+              <span class="dot" aria-hidden="true"></span><span class="choice-label"></span><kbd aria-hidden="true">2</kbd>
+            </button>
+          </div>
+        </div>
+
+        <figure class="specimen">
+          <div id="swatch" class="swatch" role="img" aria-label="Color swatch to classify"></div>
+        </figure>
+      </section>
+
+      <section id="result" class="experiment" aria-labelledby="result-title" hidden>
+        <div class="prompt">
+          <h1 id="result-title" tabindex="-1">Your color<br> boundary.</h1>
+          <p id="result-caption"></p>
+          <div class="result-actions">
+            <button id="restart" class="action action-primary" type="button">Play again <span aria-hidden="true">↻</span></button>
+          </div>
+        </div>
+
+        <figure class="specimen">
+          <div class="result-scale">
+            <div id="gradient" class="gradient" role="img"></div>
+            <div id="boundary-marker" class="boundary-marker" aria-hidden="true"></div>
+          </div>
+          <figcaption class="scale-labels">
+            <span id="from-label"></span>
+            <span id="to-label"></span>
+          </figcaption>
+        </figure>
+      </section>
+
+      <p id="color-note" class="note" role="status" hidden></p>
+      <noscript><p class="note">Enable JavaScript to take the color test.</p></noscript>
+    </main>
+
+    <footer class="site-footer">
+      <span>Inspired by <a href="https://ismy.blue/">Is My Blue Your Blue?</a></span>
+      <span>Set the endpoints with <code>from</code> and <code>to</code> in the URL.</span>
+    </footer>
+  </div>
+</body>
+</html>
