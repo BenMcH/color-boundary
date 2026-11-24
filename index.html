@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Find where one color becomes another in seven quick choices.">
+  <meta name="description" content="Find where one color becomes another. Choose how many swatches to test.">
   <meta name="theme-color" content="#f4f2ea">
   <title>Color Boundary</title>
   <style>
@@ -65,6 +65,34 @@ button { font: inherit; }
   background: linear-gradient(90deg, var(--from) 50%, var(--to) 50%);
 }
 
+.quiz-controls {
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 3vw, 24px);
+}
+
+.sample-size {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: .75rem;
+  white-space: nowrap;
+}
+
+.sample-size input {
+  width: 6.5ch;
+  min-height: 33px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fbfaf4;
+  color: var(--ink);
+  font: inherit;
+}
+
+.sample-size input:disabled { background: transparent; color: var(--muted); }
+
 .progress {
   display: grid;
   gap: 8px;
@@ -72,21 +100,22 @@ button { font: inherit; }
   color: var(--muted);
   font-size: .75rem;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .progress-track {
-  display: flex;
-  gap: 3px;
-}
-
-.progress-track span {
-  flex: 1;
   height: 3px;
   border-radius: 3px;
   background: var(--line);
 }
 
-.progress-track .filled { background: var(--accent); }
+.progress-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
 
 main {
   display: flex;
@@ -145,7 +174,7 @@ h1 {
 }
 
 .choice:hover { border-color: var(--accent); background: #fffef9; }
-button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .choice-label { overflow-wrap: anywhere; }
 .dot {
@@ -234,6 +263,11 @@ figcaption {
   kbd { display: none; }
 }
 
+@media (max-width: 480px) {
+  .quiz-controls { display: grid; gap: 6px; padding-block: 9px; }
+  .progress { gap: 4px; }
+}
+
 @media (max-width: 760px) {
   .site-header { min-height: 67px; }
   .experiment { grid-template-columns: 1fr; gap: 18px; }
@@ -250,8 +284,7 @@ figcaption {
 }
 </style>
   <script type="module">
-const explorationRounds = 5;
-const rounds = explorationRounds + 2;
+const bandCount = 5;
 const parameters = new URLSearchParams(location.search);
 const defaultFrom = { hex: '#FFA500', label: 'Orange' };
 const defaultTo = { hex: '#FF0000', label: 'Red' };
@@ -261,13 +294,16 @@ const to = readEndpoint('to', defaultTo);
 const quiz = document.querySelector('#quiz');
 const result = document.querySelector('#result');
 const swatch = document.querySelector('#swatch');
+const sampleSize = document.querySelector('#sample-size');
 const progress = document.querySelector('#progress-label');
-const progressTrack = document.querySelector('#progress-track');
+const progressFill = document.querySelector('#progress-fill');
 const gradient = document.querySelector('#gradient');
 const marker = document.querySelector('#boundary-marker');
 const buttons = [...document.querySelectorAll('.choice')];
 let round;
-let explorationPositions;
+let rounds;
+let band;
+let bandStep;
 let explorationAnswers;
 let swatchPosition;
 let lower;
@@ -346,13 +382,9 @@ function colorAt(position) {
 }
 
 function startQuiz() {
-  const firstBand = Math.floor(Math.random() * explorationRounds);
-  const bandStep = Math.random() < .5 ? 2 : 3;
-  explorationPositions = Array.from({ length: explorationRounds }, (_, index) => {
-    // Skip neighboring bands so early swatches always jump across the gradient.
-    const band = (firstBand + index * bandStep) % explorationRounds;
-    return (band + .5) / explorationRounds + (Math.random() - .5) * .08;
-  });
+  rounds = sampleSize.validity.valid ? sampleSize.valueAsNumber : Number(sampleSize.defaultValue);
+  sampleSize.disabled = false;
+  band = undefined;
   explorationAnswers = [];
   round = 0;
   lower = 0;
@@ -360,6 +392,20 @@ function startQuiz() {
   result.hidden = true;
   quiz.hidden = false;
   renderRound();
+}
+
+function nextExplorationPosition() {
+  if (round % bandCount === 0) {
+    // Start each pass away from the last swatch and visit each band once.
+    const starts = Array.from({ length: bandCount }, (_, index) => index)
+      .filter(candidate => band === undefined || Math.abs(candidate - band) >= 2);
+    band = starts[Math.floor(Math.random() * starts.length)];
+    bandStep = Math.random() < .5 ? 2 : 3;
+  } else {
+    band = (band + bandStep) % bandCount;
+  }
+  const spread = round < bandCount ? .08 : .18;
+  return (band + .5) / bandCount + (Math.random() - .5) * spread;
 }
 
 function estimateBoundaryRange() {
@@ -374,8 +420,8 @@ function estimateBoundaryRange() {
   for (const answer of [...sorted, { position: 1, endpoint: 'to' }]) {
     const right = answer.position;
     const distanceToCenter = Math.abs((left + right) / 2 - .5);
-    if (disagreements < fewestDisagreements ||
-        (disagreements === fewestDisagreements && distanceToCenter < closestToCenter)) {
+    if (left < right && (disagreements < fewestDisagreements ||
+        (disagreements === fewestDisagreements && distanceToCenter < closestToCenter))) {
       fewestDisagreements = disagreements;
       closestToCenter = distanceToCenter;
       range = [left, right];
@@ -387,12 +433,14 @@ function estimateBoundaryRange() {
 }
 
 function renderRound() {
-  swatchPosition = round < explorationRounds ? explorationPositions[round] : (lower + upper) / 2;
+  swatchPosition = round < Math.max(1, rounds - 2) ? nextExplorationPosition() : (lower + upper) / 2;
   swatch.style.backgroundColor = colorAt(swatchPosition);
+  renderProgress();
+}
+
+function renderProgress() {
   progress.textContent = 'Round ' + (round + 1) + ' of ' + rounds;
-  for (const [index, segment] of [...progressTrack.children].entries()) {
-    segment.classList.toggle('filled', index <= round);
-  }
+  progressFill.style.width = (round + 1) / rounds * 100 + '%';
 }
 
 function showResult() {
@@ -411,12 +459,19 @@ function showResult() {
   quiz.hidden = true;
   result.hidden = false;
   progress.textContent = 'Test complete';
+  sampleSize.disabled = false;
   document.querySelector('#result-title').focus();
 }
 
 function choose(endpoint) {
   if (round >= rounds) return;
+  if (round === 0) {
+    if (!sampleSize.reportValidity()) return;
+    rounds = sampleSize.valueAsNumber;
+    sampleSize.disabled = true;
+  }
 
+  const explorationRounds = Math.max(1, rounds - 2);
   if (round < explorationRounds) {
     explorationAnswers.push({ position: swatchPosition, endpoint });
     if (explorationAnswers.length === explorationRounds) {
@@ -441,21 +496,25 @@ for (const button of buttons) {
 }
 
 document.addEventListener('keydown', event => {
-  if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || quiz.hidden) return;
+  if (event.target === sampleSize || event.repeat || event.altKey || event.ctrlKey || event.metaKey || quiz.hidden) return;
   if (event.key === '1') choose('from');
   if (event.key === '2') choose('to');
 });
 
+sampleSize.addEventListener('input', () => {
+  if (round !== 0 || !sampleSize.validity.valid) return;
+  rounds = sampleSize.valueAsNumber;
+  renderProgress();
+});
+
 document.querySelector('#restart').addEventListener('click', () => {
+  if (!sampleSize.reportValidity()) return;
   startQuiz();
   buttons[0].focus();
 });
 
 document.documentElement.style.setProperty('--from', from.hex);
 document.documentElement.style.setProperty('--to', to.hex);
-for (let index = 0; index < rounds; index += 1) {
-  progressTrack.append(document.createElement('span'));
-}
 startQuiz();
 
 const notes = [];
@@ -473,9 +532,15 @@ if (notes.length) {
   <div class="page">
     <header class="site-header">
       <div class="wordmark"><span class="mark" aria-hidden="true"></span> Color Boundary</div>
-      <div id="progress" class="progress" role="status">
-        <span id="progress-label">Round 1 of 7</span>
-        <span id="progress-track" class="progress-track" aria-hidden="true"></span>
+      <div class="quiz-controls">
+        <label class="sample-size" for="sample-size">
+          Sample size
+          <input type="number" id="sample-size" value="7" min="1" max="9007199254740991" step="1" inputmode="numeric" required>
+        </label>
+        <div class="progress" role="status">
+          <span id="progress-label">Round 1 of 7</span>
+          <span class="progress-track" aria-hidden="true"><span id="progress-fill"></span></span>
+        </div>
       </div>
     </header>
 
